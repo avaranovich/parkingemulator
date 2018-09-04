@@ -5,11 +5,14 @@
 namespace EventHubReliableSend
 {
     using System;
+    using System.Collections.Generic;
     using System.Text;
     using System.Threading;
     using System.Threading.Tasks;
     using Microsoft.ServiceBus;
     using Microsoft.ServiceBus.Messaging;
+    using Newtonsoft.Json;
+    using Newtonsoft.Json.Linq;
 
     class SenderClient
     {
@@ -17,6 +20,9 @@ namespace EventHubReliableSend
         EventHubClient ehClient;
         Task sendTask;
         Random rnd;
+
+        // our emulated parking garage
+        private List<dynamic> parking = new List<dynamic>();
 
         public int totalNumberOfEventsSent = 0;
 
@@ -79,22 +85,75 @@ namespace EventHubReliableSend
             Console.WriteLine("Client-{0}: Stopped sending events. Total number of events sent: {1}", this.ClientInd, totalNumberOfEventsSent);
         }
 
+        private string GenerateLicencePlate()
+        {
+            var chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789";
+            var stringChars = new char[8];
+            var random = new Random();
+
+            for (int i = 0; i < stringChars.Length; i++)
+            {
+                stringChars[i] = chars[random.Next(chars.Length)];
+            }
+
+            var finalString = new String(stringChars);
+            return finalString;
+        }
+
         EventDataBatch GenerateNextBatch()
         {
             var ehBatch = this.ehClient.CreateBatch();
-            while (true)
+            for (int i = 0; i < 10; i++)
             {
                 // Send random size payloads.
-                var payload = new byte[this.rnd.Next(1024)];
-                this.rnd.NextBytes(payload);
+                //var payload = new byte[this.rnd.Next(1024)];
+                //this.rnd.NextBytes(payload);
 
-                var ed = new EventData(payload);
-                ed.Properties["clientind"] = this.ClientInd;
+                Random rnd = new Random();
+                int op = rnd.Next(0, 2); //generate an OP, either enter or exit
 
-                if (!ehBatch.TryAdd(ed))
+                byte[] body = null;
+
+                if (op == 0) 
                 {
-                    break;
+                    dynamic e = new JObject();
+                    //populate a new car
+                    e.Time = DateTime.Now;
+                    e.Plate = GenerateLicencePlate();
+                    e.Op = op;
+                    e.Id = rnd.Next(1, 2000); // get from available plate
+
+                    parking.Add(e);
+                    body = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(e));
                 }
+                if (op == 1)
+                {
+                    rnd = new Random();
+                    int idx = rnd.Next(0, parking.Count); //random car from is leaving the garage
+
+                    if (parking.Count > idx)
+                    {
+                        dynamic e = parking[idx];
+                        e.Time = DateTime.Now.AddMinutes(rnd.Next(10, 30));
+                        e.Op = op;
+                        parking.RemoveAt(idx);
+                        body = Encoding.UTF8.GetBytes(JsonConvert.SerializeObject(e));
+                    }
+                }
+
+                if (body != null)
+                {
+                    var ed = new EventData(body);
+
+                    ed.Properties["clientind"] = this.ClientInd;
+
+                    if (!ehBatch.TryAdd(ed))
+                    {
+                        break;
+                    }
+                }
+
+                Thread.Sleep(1000);
             }
 
             return ehBatch;

@@ -4,6 +4,8 @@
 
 namespace EventHubReliableSend
 {
+    using Microsoft.ServiceBus;
+    using Microsoft.ServiceBus.Messaging;
     using System;
     using System.Collections.Generic;
     using System.Linq;
@@ -12,16 +14,19 @@ namespace EventHubReliableSend
 
     class Program
     {
-        const string ConnString = "<Event Hubs Connection String>";
-        const string EhName = "<Event Hubs Name>";
+        // 
+        const string ConnString = "Endpoint=sb://xxx.servicebus.windows.net/;SharedAccessKeyName=default;SharedAccessKey=yyy";
+        //
+        const string EhName = "pydata";
+
 
         // Increasing number of clients help to distribute load accross multiple TCP channels.
-        const int NumberOfParallelClients = 10;
+        const int NumberOfParallelClients = 1;
 
         // Try planning 1MB/sec load per partition.
         // For example, if you are planning to push up to 32MB/sec to an event hub then create a 32-partition entity.
         // More details at https://azure.microsoft.com/en-us/pricing/details/event-hubs/
-        const int PartitionCount = 4;
+        const int PartitionCount = 2;
 
         static List<SenderClient> senderClients = new List<SenderClient>();
         static CancellationTokenSource cancellationTokenSource = new CancellationTokenSource();
